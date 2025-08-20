@@ -7,7 +7,7 @@ struct KeyboardLayout {
         let type: KeyButton.KeyType
     }
 
-    static func create(target: Any?, action: Selector) -> UIView {
+    static func create(target: Any?, action: Selector, shiftState: KeyboardViewController.ShiftState) -> UIView {
         let keyboardView = UIView()
         keyboardView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -17,15 +17,27 @@ struct KeyboardLayout {
         mainStackView.spacing = 8
         mainStackView.distribution = .fillEqually
 
+        let characterRows = [
+            ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+            ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+            ["Z", "X", "C", "V", "B", "N", "M"]
+        ]
+
+        let characterKeys: [[Key]] = characterRows.map { row in
+            row.map { char in
+                let title = (shiftState == .off) ? char.lowercased() : char.uppercased()
+                return Key(title: title, type: .character)
+            }
+        }
+
         let rows: [[Key]] = [
-            ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"].map { Key(title: $0, type: .character) },
-            ["A", "S", "D", "F", "G", "H", "J", "K", "L"].map { Key(title: $0, type: .character) },
-            ["Z", "X", "C", "V", "B", "N", "M"].map { Key(title: $0, type: .character) },
+            characterKeys[0],
+            characterKeys[1],
+            [Key(title: "↑", type: .shift)] + characterKeys[2] + [Key(title: "⌫", type: .backspace)],
             [
                 Key(title: "🌐", type: .nextKeyboard),
                 Key(title: "space", type: .space),
-                Key(title: "return", type: .returnKey),
-                Key(title: "⌫", type: .backspace)
+                Key(title: "return", type: .returnKey)
             ]
         ]
 
@@ -42,6 +54,8 @@ struct KeyboardLayout {
                 if key.type == .space {
                     // A simple way to make the space bar wider
                     button.setTitle("                           ", for: .normal)
+                } else if key.type == .shift {
+                    button.isSelected = (shiftState != .off)
                 }
 
                 rowStackView.addArrangedSubview(button)

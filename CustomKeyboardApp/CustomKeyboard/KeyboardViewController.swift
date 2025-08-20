@@ -2,11 +2,29 @@ import UIKit
 
 class KeyboardViewController: UIInputViewController {
 
+    enum ShiftState {
+        case off
+        case on
+        case capsLock
+    }
+
+    private var shiftState: ShiftState = .off {
+        didSet {
+            // Redraw the keyboard when the shift state changes
+            setupKeyboard()
+        }
+    }
+
+    private let impactFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
         self.setupKeyboard()
         self.updateKeyboardAppearance()
+
+        // Prepare the haptic feedback generator to reduce latency
+        self.impactFeedbackGenerator.prepare()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -33,7 +51,7 @@ class KeyboardViewController: UIInputViewController {
         }
 
         // Create the keyboard layout
-        let keyboardView = KeyboardLayout.create(target: self, action: #selector(keyPressed(_:)))
+        let keyboardView = KeyboardLayout.create(target: self, action: #selector(keyPressed(_:)), shiftState: self.shiftState)
 
         // Add the keyboard view to the input view
         self.inputView?.addSubview(keyboardView)
@@ -58,6 +76,9 @@ class KeyboardViewController: UIInputViewController {
     }
 
     @objc private func keyPressed(_ sender: UIButton) {
+        // Trigger haptic feedback
+        self.impactFeedbackGenerator.impactOccurred()
+
         guard let keyButton = sender as? KeyButton else {
             return
         }
@@ -67,6 +88,10 @@ class KeyboardViewController: UIInputViewController {
             if let title = keyButton.title(for: .normal) {
                 self.textDocumentProxy.insertText(title)
             }
+            // If shift was on, turn it off
+            if self.shiftState == .on {
+                self.shiftState = .off
+            }
         case .backspace:
             self.textDocumentProxy.deleteBackward()
         case .space:
@@ -75,6 +100,16 @@ class KeyboardViewController: UIInputViewController {
             self.textDocumentProxy.insertText("\n")
         case .nextKeyboard:
             self.advanceToNextInputMode()
+        case .shift:
+            // Toggle shift state
+            switch self.shiftState {
+            case .off:
+                self.shiftState = .on
+            case .on:
+                self.shiftState = .off // For now, just toggles on and off. Caps lock later.
+            case .capsLock:
+                self.shiftState = .off
+            }
         }
     }
 }

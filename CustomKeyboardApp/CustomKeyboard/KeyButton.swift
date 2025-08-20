@@ -8,6 +8,7 @@ class KeyButton: UIButton {
         case space
         case returnKey
         case nextKeyboard
+        case shift
     }
 
     var keyType: KeyType = .character
@@ -60,7 +61,13 @@ class KeyButton: UIButton {
             layer.shadowColor = UIColor.black.cgColor
             layer.shadowOpacity = 0.2
         }
-        self.backgroundColor = normalBackgroundColor
+
+        // Respect the selected state
+        if isSelected && keyType == .shift {
+             self.backgroundColor = .systemBlue
+        } else {
+             self.backgroundColor = normalBackgroundColor
+        }
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -70,11 +77,18 @@ class KeyButton: UIButton {
         }
     }
 
+    override var isSelected: Bool {
+        didSet {
+            updateAppearance(for: self.traitCollection.userInterfaceStyle)
+        }
+    }
+
     @objc private func touchDown() {
         self.backgroundColor = highlightedBackgroundColor
     }
 
     @objc private func touchUp() {
-        self.backgroundColor = normalBackgroundColor
+        // After touch up, revert to the correct appearance based on selection and style
+        updateAppearance(for: self.traitCollection.userInterfaceStyle)
     }
 }
