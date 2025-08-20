@@ -4,24 +4,16 @@ class KeyboardViewController: UIInputViewController {
 
     // MARK: - Properties
 
-    /// Enum to manage the shift state of the keyboard.
     enum ShiftState {
-        case off
-        case on
-        case capsLock
+        case off, on, capsLock
     }
 
-    /// The current shift state of the keyboard.
     private var shiftState: ShiftState = .off {
-        didSet {
-            setupKeyboard()
-        }
+        didSet { setupKeyboard() }
     }
 
-    /// Haptic feedback generator for key presses.
     private let impactFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
 
-    /// The view that shows a preview of a standard key being pressed.
     private lazy var previewView: KeyPreviewView = {
         let view = KeyPreviewView(frame: .zero)
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -29,7 +21,6 @@ class KeyboardViewController: UIInputViewController {
         return view
     }()
 
-    /// The view that shows accent character options when a key is long-pressed.
     private lazy var accentPopupView: AccentPopupView = {
         let view = AccentPopupView(frame: .zero)
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -41,136 +32,130 @@ class KeyboardViewController: UIInputViewController {
         return view
     }()
 
-    /// A property to keep track of the currently highlighted accent button.
     private var highlightedAccentButton: UIButton?
-
-    /// A timer to handle continuous backspace.
     private var backspaceTimer: Timer?
+    private var heightConstraint: NSLayoutConstraint?
 
-    /// A dictionary mapping base characters to their accented versions.
     private let accentCharacters: [String: [String]] = [
-        "e": ["é", "ê", "ë", "è", "ē", "ė", "ę"],
-        "y": ["ý", "ÿ"],
-        "u": ["ú", "û", "ü", "ù", "ū"],
-        "i": ["í", "î", "ï", "ì", "ī"],
-        "o": ["ó", "ô", "ö", "ò", "ō", "õ"],
-        "a": ["á", "â", "ä", "à", "æ", "ã", "å", "ā"],
-        "s": ["ś", "š", "ß"],
-        "l": ["ł"],
-        "z": ["ź", "ż", "ž"],
-        "c": ["ç", "ć", "č"],
-        "n": ["ñ", "ń"]
+        "e": ["é", "ê", "ë", "è", "ē", "ė", "ę"], "y": ["ý", "ÿ"], "u": ["ú", "û", "ü", "ù", "ū"],
+        "i": ["í", "î", "ï", "ì", "ī"], "o": ["ó", "ô", "ö", "ò", "ō", "õ"], "a": ["á", "â", "ä", "à", "æ", "ã", "å", "ā"],
+        "s": ["ś", "š", "ß"], "l": ["ł"], "z": ["ź", "ż", "ž"], "c": ["ç", "ć", "č"], "n": ["ñ", "ń"]
     ]
 
-    // MARK: - Lifecycle Methods
+    // MARK: - Lifecycle & Layout
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        self.setupKeyboard()
-        self.updateKeyboardAppearance()
-        self.impactFeedbackGenerator.prepare()
+
+        guard let inputView = self.inputView else { return }
+        let heightConstraint = inputView.heightAnchor.constraint(equalToConstant: 271)
+        heightConstraint.priority = .required - 1
+        heightConstraint.isActive = true
+        self.heightConstraint = heightConstraint
+
+        setupKeyboard()
+        updateKeyboardAppearance()
+        impactFeedbackGenerator.prepare()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updateKeyboardHeight()
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        if self.traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
-            self.updateKeyboardAppearance()
+        if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
+            updateKeyboardAppearance()
         }
     }
 
-    // MARK: - Keyboard Setup
+    // MARK: - Setup & Appearance
 
     private func setupKeyboard() {
-        for subview in self.inputView?.subviews ?? [] {
-            subview.removeFromSuperview()
-        }
-        let keyboardView = KeyboardLayout.create(
-            target: self,
-            action: #selector(keyPressed(_:)),
-            previewAction: #selector(handlePreviewGesture(_:)),
-            shiftState: self.shiftState
-        )
-        self.inputView?.addSubview(keyboardView)
-        self.inputView?.addSubview(previewView)
-        self.inputView?.addSubview(accentPopupView)
-        if let inputView = self.inputView {
-            NSLayoutConstraint.activate([
-                keyboardView.topAnchor.constraint(equalTo: inputView.topAnchor),
-                keyboardView.bottomAnchor.constraint(equalTo: inputView.bottomAnchor),
-                keyboardView.leadingAnchor.constraint(equalTo: inputView.leadingAnchor),
-                keyboardView.trailingAnchor.constraint(equalTo: inputView.trailingAnchor)
-            ])
-        }
+        guard let inputView = self.inputView else { return }
+        inputView.subviews.forEach { $0.removeFromSuperview() }
+
+        let keyboardView = KeyboardLayout.create(target: self, action: #selector(keyPressed), previewAction: #selector(handlePreviewGesture), shiftState: shiftState)
+
+        inputView.addSubview(keyboardView)
+        inputView.addSubview(previewView)
+        inputView.addSubview(accentPopupView)
+
+        NSLayoutConstraint.activate([
+            keyboardView.topAnchor.constraint(equalTo: inputView.topAnchor),
+            keyboardView.bottomAnchor.constraint(equalTo: inputView.bottomAnchor),
+            keyboardView.leadingAnchor.constraint(equalTo: inputView.leadingAnchor),
+            keyboardView.trailingAnchor.constraint(equalTo: inputView.trailingAnchor)
+        ])
     }
 
     private func updateKeyboardAppearance() {
-        if self.traitCollection.userInterfaceStyle == .dark {
-            self.inputView?.backgroundColor = UIColor(white: 0.1, alpha: 1.0)
+        if traitCollection.userInterfaceStyle == .dark {
+            inputView?.backgroundColor = UIColor(white: 0.1, alpha: 1.0)
         } else {
-            self.inputView?.backgroundColor = UIColor(red: 0.82, green: 0.84, blue: 0.86, alpha: 1.0)
+            inputView?.backgroundColor = UIColor(red: 0.82, green: 0.84, blue: 0.86, alpha: 1.0)
         }
     }
 
-    // MARK: - Key Actions
+    private func updateKeyboardHeight() {
+        guard let heightConstraint = self.heightConstraint else { return }
+        let isLandscape = view.frame.width > view.frame.height
+        let portraitHeight: CGFloat = 271
+        let landscapeHeight: CGFloat = 206
+        let bottomSafeArea = view.safeAreaInsets.bottom
+        let newHeight = (isLandscape ? landscapeHeight : portraitHeight) + bottomSafeArea
+        if heightConstraint.constant != newHeight {
+            heightConstraint.constant = newHeight
+        }
+    }
+
+    // MARK: - Actions & Gestures
 
     @objc private func keyPressed(_ sender: UIButton) {
-        self.impactFeedbackGenerator.impactOccurred()
+        impactFeedbackGenerator.impactOccurred()
         guard let keyButton = sender as? KeyButton else { return }
-
-        // Stop the backspace timer if any other key is tapped.
         stopBackspaceTimer()
 
         switch keyButton.keyType {
         case .character:
-            if let title = keyButton.title(for: .normal) {
-                self.textDocumentProxy.insertText(title)
-            }
-            if self.shiftState == .on {
-                self.shiftState = .off
-            }
+            if let title = keyButton.title(for: .normal) { textDocumentProxy.insertText(title) }
+            if shiftState == .on { shiftState = .off }
         case .backspace:
-            self.textDocumentProxy.deleteBackward()
+            textDocumentProxy.deleteBackward()
         case .space:
-            self.textDocumentProxy.insertText(" ")
+            textDocumentProxy.insertText(" ")
         case .returnKey:
-            self.textDocumentProxy.insertText("\n")
+            textDocumentProxy.insertText("\n")
         case .nextKeyboard:
-            self.advanceToNextInputMode()
+            advanceToNextInputMode()
         case .shift:
-            switch self.shiftState {
-            case .off: self.shiftState = .on
-            case .on: self.shiftState = .off
-            case .capsLock: self.shiftState = .off
+            switch shiftState {
+            case .off: shiftState = .on
+            case .on: shiftState = .off
+            case .capsLock: shiftState = .off
             }
         }
     }
 
-    // MARK: - Gesture Handling
-
     @objc private func handlePreviewGesture(_ gesture: UILongPressGestureRecognizer) {
         guard let button = gesture.view as? KeyButton, let inputView = self.inputView else { return }
-
         if button.keyType == .backspace {
             handleBackspaceGesture(gesture)
             return
         }
-
         let touchLocation = gesture.location(in: inputView)
         switch gesture.state {
         case .began:
             showPreview(for: button, in: inputView)
         case .changed:
-            if !accentPopupView.isHidden {
-                updateHighlightedAccentButton(at: touchLocation, in: inputView)
-            }
+            if !accentPopupView.isHidden { updateHighlightedAccentButton(at: touchLocation, in: inputView) }
         case .ended:
             if !accentPopupView.isHidden {
                 if let finalButton = highlightedAccentButton, let character = finalButton.title(for: .normal) {
-                    self.textDocumentProxy.insertText(character)
+                    textDocumentProxy.insertText(character)
                 } else {
-                    if let baseCharacter = button.title(for: .normal) {
-                        self.textDocumentProxy.insertText(baseCharacter)
-                    }
+                    if let baseCharacter = button.title(for: .normal) { textDocumentProxy.insertText(baseCharacter) }
                 }
             }
             hideAccentPopup()
@@ -178,26 +163,23 @@ class KeyboardViewController: UIInputViewController {
         case .cancelled, .failed:
             hideAccentPopup()
             previewView.isHidden = true
-        default:
-            break
+        default: break
         }
     }
 
-    /// Handles the specific long press gesture for the backspace key.
     private func handleBackspaceGesture(_ gesture: UILongPressGestureRecognizer) {
         switch gesture.state {
         case .began:
-            self.textDocumentProxy.deleteBackward()
+            textDocumentProxy.deleteBackward()
             backspaceTimer = Timer.scheduledTimer(timeInterval: 0.1, target: self, selector: #selector(handleBackspaceTimer), userInfo: nil, repeats: true)
         case .ended, .cancelled, .failed:
             stopBackspaceTimer()
-        default:
-            break
+        default: break
         }
     }
 
     @objc private func handleBackspaceTimer() {
-        self.textDocumentProxy.deleteBackward()
+        textDocumentProxy.deleteBackward()
     }
 
     private func stopBackspaceTimer() {
@@ -205,11 +187,8 @@ class KeyboardViewController: UIInputViewController {
         backspaceTimer = nil
     }
 
-    // MARK: - Helper Methods for Popups
-
     private func showPreview(for button: KeyButton, in inputView: UIView) {
         if button.keyType == .backspace { return }
-
         let baseCharacter = button.title(for: .normal) ?? ""
         if let accents = accentCharacters[baseCharacter.lowercased()] {
             accentPopupView.configure(with: accents)
