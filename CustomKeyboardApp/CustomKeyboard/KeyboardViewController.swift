@@ -12,7 +12,6 @@ class KeyboardViewController: UIInputViewController {
     }
 
     /// The current shift state of the keyboard.
-    /// When this property is set, the keyboard is redrawn to reflect the new state.
     private var shiftState: ShiftState = .off {
         didSet {
             setupKeyboard()
@@ -26,7 +25,7 @@ class KeyboardViewController: UIInputViewController {
     private lazy var previewView: KeyPreviewView = {
         let view = KeyPreviewView(frame: .zero)
         view.translatesAutoresizingMaskIntoConstraints = false
-        view.isHidden = true // Initially hidden
+        view.isHidden = true
         return view
     }()
 
@@ -34,11 +33,7 @@ class KeyboardViewController: UIInputViewController {
     private lazy var accentPopupView: AccentPopupView = {
         let view = AccentPopupView(frame: .zero)
         view.translatesAutoresizingMaskIntoConstraints = false
-        view.isHidden = true // Initially hidden
-
-        // This closure is called when a user taps an accent button in the popup.
-        // Note: This handles the case where the user taps an accent, but the main logic
-        // for long-press-and-drag selection is in `handlePreviewGesture`.
+        view.isHidden = true
         view.onAccentCharacterTapped = { [weak self] character in
             self?.textDocumentProxy.insertText(character)
             self?.hideAccentPopup()
@@ -46,8 +41,11 @@ class KeyboardViewController: UIInputViewController {
         return view
     }()
 
-    /// A property to keep track of the currently highlighted accent button as the user drags their finger.
+    /// A property to keep track of the currently highlighted accent button.
     private var highlightedAccentButton: UIButton?
+
+    /// A timer to handle continuous backspace.
+    private var backspaceTimer: Timer?
 
     /// A dictionary mapping base characters to their accented versions.
     private let accentCharacters: [String: [String]] = [
@@ -68,19 +66,9 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
         self.setupKeyboard()
         self.updateKeyboardAppearance()
-
         self.impactFeedbackGenerator.prepare()
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -92,23 +80,19 @@ class KeyboardViewController: UIInputViewController {
 
     // MARK: - Keyboard Setup
 
-    /// Sets up the keyboard layout and adds all views to the input view.
     private func setupKeyboard() {
         for subview in self.inputView?.subviews ?? [] {
             subview.removeFromSuperview()
         }
-
         let keyboardView = KeyboardLayout.create(
             target: self,
             action: #selector(keyPressed(_:)),
             previewAction: #selector(handlePreviewGesture(_:)),
             shiftState: self.shiftState
         )
-
         self.inputView?.addSubview(keyboardView)
         self.inputView?.addSubview(previewView)
         self.inputView?.addSubview(accentPopupView)
-
         if let inputView = self.inputView {
             NSLayoutConstraint.activate([
                 keyboardView.topAnchor.constraint(equalTo: inputView.topAnchor),
@@ -132,6 +116,9 @@ class KeyboardViewController: UIInputViewController {
     @objc private func keyPressed(_ sender: UIButton) {
         self.impactFeedbackGenerator.impactOccurred()
         guard let keyButton = sender as? KeyButton else { return }
+
+        // Stop the backspace timer if any other key is tapped.
+        stopBackspaceTimer()
 
         switch keyButton.keyType {
         case .character:
@@ -160,20 +147,22 @@ class KeyboardViewController: UIInputViewController {
 
     // MARK: - Gesture Handling
 
-    /// Handles the long press gesture for showing key previews and accent popups.
     @objc private func handlePreviewGesture(_ gesture: UILongPressGestureRecognizer) {
         guard let button = gesture.view as? KeyButton, let inputView = self.inputView else { return }
-        let touchLocation = gesture.location(in: inputView)
 
+        if button.keyType == .backspace {
+            handleBackspaceGesture(gesture)
+            return
+        }
+
+        let touchLocation = gesture.location(in: inputView)
         switch gesture.state {
         case .began:
             showPreview(for: button, in: inputView)
-
         case .changed:
             if !accentPopupView.isHidden {
                 updateHighlightedAccentButton(at: touchLocation, in: inputView)
             }
-
         case .ended:
             if !accentPopupView.isHidden {
                 if let finalButton = highlightedAccentButton, let character = finalButton.title(for: .normal) {
@@ -186,22 +175,42 @@ class KeyboardViewController: UIInputViewController {
             }
             hideAccentPopup()
             previewView.isHidden = true
-
         case .cancelled, .failed:
             hideAccentPopup()
             previewView.isHidden = true
-
         default:
             break
         }
     }
 
+    /// Handles the specific long press gesture for the backspace key.
+    private func handleBackspaceGesture(_ gesture: UILongPressGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            self.textDocumentProxy.deleteBackward()
+            backspaceTimer = Timer.scheduledTimer(timeInterval: 0.1, target: self, selector: #selector(handleBackspaceTimer), userInfo: nil, repeats: true)
+        case .ended, .cancelled, .failed:
+            stopBackspaceTimer()
+        default:
+            break
+        }
+    }
+
+    @objc private func handleBackspaceTimer() {
+        self.textDocumentProxy.deleteBackward()
+    }
+
+    private func stopBackspaceTimer() {
+        backspaceTimer?.invalidate()
+        backspaceTimer = nil
+    }
+
     // MARK: - Helper Methods for Popups
 
-    /// Shows the correct popup (accent or standard preview) for a given key.
     private func showPreview(for button: KeyButton, in inputView: UIView) {
-        let baseCharacter = button.title(for: .normal) ?? ""
+        if button.keyType == .backspace { return }
 
+        let baseCharacter = button.title(for: .normal) ?? ""
         if let accents = accentCharacters[baseCharacter.lowercased()] {
             accentPopupView.configure(with: accents)
             let buttonFrame = button.convert(button.bounds, to: inputView)
@@ -225,11 +234,9 @@ class KeyboardViewController: UIInputViewController {
         }
     }
 
-    /// Updates the highlighting of the accent buttons based on the user's touch location.
     private func updateHighlightedAccentButton(at location: CGPoint, in inputView: UIView) {
         let locationInPopup = inputView.convert(location, to: accentPopupView)
         let newHighlightedButton = accentPopupView.button(at: locationInPopup)
-
         if newHighlightedButton != highlightedAccentButton {
             highlightedAccentButton?.backgroundColor = accentPopupView.buttonBackgroundColor
             newHighlightedButton?.backgroundColor = accentPopupView.buttonHighlightedColor
@@ -237,7 +244,6 @@ class KeyboardViewController: UIInputViewController {
         }
     }
 
-    /// Hides the accent popup and resets any related state.
     private func hideAccentPopup() {
         accentPopupView.isHidden = true
         highlightedAccentButton?.backgroundColor = accentPopupView.buttonBackgroundColor
