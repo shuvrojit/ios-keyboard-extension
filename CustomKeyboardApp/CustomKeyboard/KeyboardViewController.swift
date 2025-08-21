@@ -113,7 +113,7 @@ class KeyboardViewController: UIInputViewController {
     // MARK: - Actions & Gestures
 
     @objc private func keyPressed(_ sender: UIButton) {
-        impactFeedbackGenerator.impactOccurred()
+        triggerHapticFeedback()
         guard let keyButton = sender as? KeyButton else { return }
         stopBackspaceTimer()
 
@@ -147,6 +147,7 @@ class KeyboardViewController: UIInputViewController {
         let touchLocation = gesture.location(in: inputView)
         switch gesture.state {
         case .began:
+            triggerHapticFeedback()
             showPreview(for: button, in: inputView)
         case .changed:
             if !accentPopupView.isHidden { updateHighlightedAccentButton(at: touchLocation, in: inputView) }
@@ -170,6 +171,7 @@ class KeyboardViewController: UIInputViewController {
     private func handleBackspaceGesture(_ gesture: UILongPressGestureRecognizer) {
         switch gesture.state {
         case .began:
+            triggerHapticFeedback()
             textDocumentProxy.deleteBackward()
             backspaceTimer = Timer.scheduledTimer(timeInterval: 0.1, target: self, selector: #selector(handleBackspaceTimer), userInfo: nil, repeats: true)
         case .ended, .cancelled, .failed:
@@ -179,13 +181,25 @@ class KeyboardViewController: UIInputViewController {
     }
 
     @objc private func handleBackspaceTimer() {
-        textDocumentProxy.deleteBackward()
+        triggerHapticFeedback()
+        self.textDocumentProxy.deleteBackward()
     }
 
     private func stopBackspaceTimer() {
         backspaceTimer?.invalidate()
         backspaceTimer = nil
     }
+
+    // MARK: - Haptics
+
+    /// Triggers haptic feedback if the setting is enabled.
+    private func triggerHapticFeedback() {
+        if Settings.hapticsEnabled {
+            impactFeedbackGenerator.impactOccurred()
+        }
+    }
+
+    // MARK: - Popups
 
     private func showPreview(for button: KeyButton, in inputView: UIView) {
         if button.keyType == .backspace { return }
