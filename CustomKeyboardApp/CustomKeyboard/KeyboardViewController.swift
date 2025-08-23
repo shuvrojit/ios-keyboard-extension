@@ -4,10 +4,31 @@ class KeyboardViewController: UIInputViewController {
 
     // MARK: - Properties
 
+    /// An enum representing the different layouts the keyboard can have.
+    enum KeyboardLayoutType {
+        case alphabetic
+        case numeric
+        case symbolic
+    }
+
+    /// An enum representing the state of the shift key.
     enum ShiftState {
         case off, on, capsLock
     }
 
+    /// The current layout type of the keyboard.
+    /// When this property is set, the keyboard is redrawn to reflect the new layout.
+    private var keyboardLayoutType: KeyboardLayoutType = .alphabetic {
+        didSet {
+            // Reset shift state when layout changes
+            if oldValue != keyboardLayoutType {
+                shiftState = .off
+            }
+            setupKeyboard()
+        }
+    }
+
+    /// The current shift state of the keyboard.
     private var shiftState: ShiftState = .off {
         didSet { setupKeyboard() }
     }
@@ -76,7 +97,13 @@ class KeyboardViewController: UIInputViewController {
         guard let inputView = self.inputView else { return }
         inputView.subviews.forEach { $0.removeFromSuperview() }
 
-        let keyboardView = KeyboardLayout.create(target: self, action: #selector(keyPressed), previewAction: #selector(handlePreviewGesture), shiftState: shiftState)
+        let keyboardView = KeyboardLayout.create(
+            target: self,
+            action: #selector(keyPressed),
+            previewAction: #selector(handlePreviewGesture),
+            shiftState: shiftState,
+            layoutType: keyboardLayoutType
+        )
 
         inputView.addSubview(keyboardView)
         inputView.addSubview(previewView)
@@ -135,6 +162,12 @@ class KeyboardViewController: UIInputViewController {
             case .on: shiftState = .off
             case .capsLock: shiftState = .off
             }
+        case .switchToNumeric:
+            keyboardLayoutType = .numeric
+        case .switchToAlphabetic:
+            keyboardLayoutType = .alphabetic
+        case .switchToSymbolic:
+            keyboardLayoutType = .symbolic
         }
     }
 

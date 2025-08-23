@@ -9,6 +9,9 @@ class KeyButton: UIButton {
         case returnKey
         case nextKeyboard
         case shift
+        case switchToNumeric
+        case switchToAlphabetic
+        case switchToSymbolic
     }
 
     var keyType: KeyType = .character

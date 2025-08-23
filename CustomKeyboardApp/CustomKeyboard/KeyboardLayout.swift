@@ -2,56 +2,43 @@ import UIKit
 
 struct KeyboardLayout {
 
+    // A struct to represent a single key, with its title and type.
     struct Key {
         let title: String
         let type: KeyButton.KeyType
     }
 
-    /// Creates the keyboard layout view and configures it with the necessary targets and actions.
-    /// - Parameters:
-    ///   - target: The target for the key tap and preview actions (typically the KeyboardViewController).
-    ///   - action: The selector for the key tap action (e.g., inserting a character).
-    ///   - previewAction: The selector for the key preview gesture action.
-    ///   - shiftState: The current shift state of the keyboard.
-    /// - Returns: A configured UIView containing the keyboard layout.
-    static func create(target: Any?, action: Selector, previewAction: Selector, shiftState: KeyboardViewController.ShiftState) -> UIView {
+    /// Creates the keyboard layout view based on the specified layout type and shift state.
+    static func create(
+        target: Any?,
+        action: Selector,
+        previewAction: Selector,
+        shiftState: KeyboardViewController.ShiftState,
+        layoutType: KeyboardViewController.KeyboardLayoutType
+    ) -> UIView {
+
         let keyboardView = UIView()
         keyboardView.translatesAutoresizingMaskIntoConstraints = false
 
+        // The main vertical stack view that holds the rows of keys.
         let mainStackView = UIStackView()
         mainStackView.translatesAutoresizingMaskIntoConstraints = false
         mainStackView.axis = .vertical
         mainStackView.spacing = 8
         mainStackView.distribution = .fillEqually
 
-        // Define the character rows for a QWERTY layout
-        let characterRows = [
-            ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
-            ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
-            ["Z", "X", "C", "V", "B", "N", "M"]
-        ]
-
-        // Map the character strings to Key objects, adjusting for shift state
-        let characterKeys: [[Key]] = characterRows.map { row in
-            row.map { char in
-                let title = (shiftState == .off) ? char.lowercased() : char.uppercased()
-                return Key(title: title, type: .character)
-            }
+        // Determine which set of key rows to use based on the current layout type.
+        let rows: [[Key]]
+        switch layoutType {
+        case .alphabetic:
+            rows = createAlphabeticRows(shiftState: shiftState)
+        case .numeric:
+            rows = createNumericRows()
+        case .symbolic:
+            rows = createSymbolicRows()
         }
 
-        // Combine character keys with special keys to form the final layout
-        let rows: [[Key]] = [
-            characterKeys[0],
-            characterKeys[1],
-            [Key(title: "↑", type: .shift)] + characterKeys[2] + [Key(title: "⌫", type: .backspace)],
-            [
-                Key(title: "🌐", type: .nextKeyboard),
-                Key(title: "space", type: .space),
-                Key(title: "return", type: .returnKey)
-            ]
-        ]
-
-        // Create the UI for each row of keys
+        // Create the UI for each row of keys.
         for rowOfKeys in rows {
             let rowStackView = UIStackView()
             rowStackView.axis = .horizontal
@@ -60,21 +47,15 @@ struct KeyboardLayout {
 
             for key in rowOfKeys {
                 let button = KeyButton(type: key.type, title: key.title)
-
-                // Add the standard tap action for when the key is released
                 button.addTarget(target, action: action, for: .touchUpInside)
 
-                // Add a long press gesture recognizer to handle the key preview
                 let longPressGesture = UILongPressGestureRecognizer(target: target, action: previewAction)
-                longPressGesture.minimumPressDuration = 0.0 // Trigger immediately
+                longPressGesture.minimumPressDuration = 0.0
                 button.addGestureRecognizer(longPressGesture)
 
-                // Special handling for certain key types
                 if key.type == .space {
-                    // A simple way to make the space bar wider
                     button.setTitle("                           ", for: .normal)
                 } else if key.type == .shift {
-                    // Set the selected state for the shift key to provide visual feedback
                     button.isSelected = (shiftState != .off)
                 }
 
@@ -84,8 +65,6 @@ struct KeyboardLayout {
         }
 
         keyboardView.addSubview(mainStackView)
-
-        // Set up constraints for the main stack view to fill the keyboard view
         NSLayoutConstraint.activate([
             mainStackView.topAnchor.constraint(equalTo: keyboardView.topAnchor, constant: 8),
             mainStackView.bottomAnchor.constraint(equalTo: keyboardView.bottomAnchor, constant: -8),
@@ -94,5 +73,87 @@ struct KeyboardLayout {
         ])
 
         return keyboardView
+    }
+
+    // MARK: - Layout Creation Helpers
+
+    /// Creates the key rows for the standard alphabetic (QWERTY) layout.
+    private static func createAlphabeticRows(shiftState: KeyboardViewController.ShiftState) -> [[Key]] {
+        let characterRows = [
+            ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+            ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+            ["Z", "X", "C", "V", "B", "N", "M"]
+        ]
+
+        let characterKeys: [[Key]] = characterRows.map { row in
+            row.map { char in
+                let title = (shiftState == .off) ? char.lowercased() : char.uppercased()
+                return Key(title: title, type: .character)
+            }
+        }
+
+        return [
+            characterKeys[0],
+            characterKeys[1],
+            [Key(title: "↑", type: .shift)] + characterKeys[2] + [Key(title: "⌫", type: .backspace)],
+            [
+                Key(title: "123", type: .switchToNumeric),
+                Key(title: "🌐", type: .nextKeyboard),
+                Key(title: "space", type: .space),
+                Key(title: "return", type: .returnKey)
+            ]
+        ]
+    }
+
+    /// Creates the key rows for the numeric layout.
+    private static func createNumericRows() -> [[Key]] {
+        let numberRow = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map { Key(title: $0, type: .character) }
+        let symbolRow = ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""].map { Key(title: $0, type: .character) }
+
+        return [
+            numberRow,
+            symbolRow,
+            [
+                Key(title: "#+=", type: .switchToSymbolic),
+                Key(title: ".", type: .character),
+                Key(title: ",", type: .character),
+                Key(title: "?", type: .character),
+                Key(title: "!", type: .character),
+                Key(title: "'", type: .character),
+                Key(title: "⌫", type: .backspace)
+            ],
+            [
+                Key(title: "ABC", type: .switchToAlphabetic),
+                Key(title: "🌐", type: .nextKeyboard),
+                Key(title: "space", type: .space),
+                Key(title: "return", type: .returnKey)
+            ]
+        ]
+    }
+
+    /// Creates the key rows for the symbolic layout.
+    private static func createSymbolicRows() -> [[Key]] {
+        let row1 = ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="].map { Key(title: $0, type: .character) }
+        let row2 = ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•"].map { Key(title: $0, type: .character) }
+
+        return [
+            row1,
+            row2,
+            [
+                Key(title: "123", type: .switchToNumeric),
+                Key(title: ".", type: .character),
+                Key(title: ",", type: .character),
+                Key(title: "?", type: .character),
+                Key(title: "!", type: .character),
+                Key(title: "'", type: .character),
+                Key(title: "⌫", type: .backspace)
+            ],
+            [
+                Key(title: "ABC", type: .switchToAlphabetic),
+                Key(title: "🌐", type: .nextKeyboard),
+                Key(title: "space", type: .space),
+                Key(title: "return", type: .returnKey)
+            ]
+        ]
     }
 }
