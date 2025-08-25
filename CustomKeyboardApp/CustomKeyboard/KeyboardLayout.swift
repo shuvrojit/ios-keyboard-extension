@@ -13,6 +13,7 @@ struct KeyboardLayout {
         target: Any?,
         action: Selector,
         previewAction: Selector,
+        doubleTapAction: Selector,
         shiftState: KeyboardViewController.ShiftState,
         layoutType: KeyboardViewController.KeyboardLayoutType
     ) -> UIView {
@@ -20,14 +21,12 @@ struct KeyboardLayout {
         let keyboardView = UIView()
         keyboardView.translatesAutoresizingMaskIntoConstraints = false
 
-        // The main vertical stack view that holds the rows of keys.
         let mainStackView = UIStackView()
         mainStackView.translatesAutoresizingMaskIntoConstraints = false
         mainStackView.axis = .vertical
         mainStackView.spacing = 8
         mainStackView.distribution = .fillEqually
 
-        // Determine which set of key rows to use based on the current layout type.
         let rows: [[Key]]
         switch layoutType {
         case .alphabetic:
@@ -38,7 +37,6 @@ struct KeyboardLayout {
             rows = createSymbolicRows()
         }
 
-        // Create the UI for each row of keys.
         for rowOfKeys in rows {
             let rowStackView = UIStackView()
             rowStackView.axis = .horizontal
@@ -57,6 +55,19 @@ struct KeyboardLayout {
                     button.setTitle("                           ", for: .normal)
                 } else if key.type == .shift {
                     button.isSelected = (shiftState != .off)
+
+                    // Add a double-tap gesture recognizer for caps lock.
+                    let doubleTapGesture = UITapGestureRecognizer(target: target, action: doubleTapAction)
+                    doubleTapGesture.numberOfTapsRequired = 2
+                    button.addGestureRecognizer(doubleTapGesture)
+
+                    // Provide a visual indicator for the caps lock state.
+                    if shiftState == .capsLock {
+                        button.tintColor = .systemBlue // Make the icon blue
+                        // You could also add an underline or other indicator here.
+                    } else {
+                        button.tintColor = nil // Use default color
+                    }
                 }
 
                 rowStackView.addArrangedSubview(button)
@@ -75,9 +86,7 @@ struct KeyboardLayout {
         return keyboardView
     }
 
-    // MARK: - Layout Creation Helpers
-
-    /// Creates the key rows for the standard alphabetic (QWERTY) layout.
+    // ... (The rest of the file is the same)
     private static func createAlphabeticRows(shiftState: KeyboardViewController.ShiftState) -> [[Key]] {
         let characterRows = [
             ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
@@ -87,7 +96,8 @@ struct KeyboardLayout {
 
         let characterKeys: [[Key]] = characterRows.map { row in
             row.map { char in
-                let title = (shiftState == .off) ? char.lowercased() : char.uppercased()
+                // Letters should be uppercase if shift is on or if caps lock is engaged.
+                let title = (shiftState == .on || shiftState == .capsLock) ? char.uppercased() : char.lowercased()
                 return Key(title: title, type: .character)
             }
         }
@@ -105,7 +115,6 @@ struct KeyboardLayout {
         ]
     }
 
-    /// Creates the key rows for the numeric layout.
     private static func createNumericRows() -> [[Key]] {
         let numberRow = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map { Key(title: $0, type: .character) }
         let symbolRow = ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""].map { Key(title: $0, type: .character) }
@@ -131,7 +140,6 @@ struct KeyboardLayout {
         ]
     }
 
-    /// Creates the key rows for the symbolic layout.
     private static func createSymbolicRows() -> [[Key]] {
         let row1 = ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="].map { Key(title: $0, type: .character) }
         let row2 = ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•"].map { Key(title: $0, type: .character) }
